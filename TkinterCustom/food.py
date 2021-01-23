@@ -4,8 +4,6 @@ from BD.dataBaser import DataBaser
 from TkinterCustom.nutritionix import EchoMaker
 
 
-# TODO al actualizar alimento, mostrar, si tiene, los datos que ya existen de precio, etc. Añadir, además,
-#  la oción de guardar sobreescribiendo lo que ya había o guardar una entrada nueva.
 # TODO Pensar en cómo añadir la información de los mercados
 class FoodFrame(tk.Frame):
     def __init__(self, father, bg):
@@ -51,7 +49,9 @@ class FoodFrame(tk.Frame):
         self.StoreList = self.dataBaser.get_store_names()
         self.SelectedStore = tk.StringVar(self.FrameUpdateFood)
         self.SelectedStore.set(self.StoreList[0])
-        self.DropdownMarket = tk.OptionMenu(self.FrameUpdateFood, self.SelectedStore, *self.StoreList)
+        self.DropdownMarket = tk.OptionMenu(self.FrameUpdateFood,
+                                            self.SelectedStore, *self.StoreList,
+                                            command=self.change_market_selection)
         self.DropdownMarket.grid(row=1, column=1, sticky=tk.W)
         # Create Price Entry
         self.EntryPrice = tk.Entry(self.FrameUpdateFood)
@@ -107,12 +107,13 @@ class FoodFrame(tk.Frame):
         if self.dataBaser.get_food(foodName):
             self.FrameUpdateFood.grid(row=1, column=6, padx=10)
             self.LabelFoodDetail.configure(text=foodName)
+            self.change_market_selection(self.SelectedStore.get())
         return event
 
     def update_food(self):
         self.dataBaser.update_food_price(self.LabelFoodDetail.cget('text'),
                                          self.SelectedStore.get(),
-                                         self.EntryPrice.get(),
+                                         float(self.EntryPrice.get()),
                                          self.SelectedQuality.get(),
                                          self.QualityList,
                                          self.EntryAmount.get(),
@@ -126,3 +127,16 @@ class FoodFrame(tk.Frame):
         self.EntryAmount.delete(0, tk.END)
         self.EntryComment.delete(0, tk.END)
         self.FrameUpdateFood.grid_forget()
+
+    def change_market_selection(self, event):
+        data = self.dataBaser.get_food_markets(self.LabelFoodDetail['text'], event)
+        self.EntryPrice.delete(0, tk.END)
+        self.SelectedQuality.set(self.QualityList[0])
+        self.EntryAmount.delete(0, tk.END)
+        self.EntryComment.delete(0, tk.END)
+        if data:
+            self.EntryPrice.insert(0, data[0][2])
+            self.SelectedQuality.set(self.QualityList[int(data[0][3])])
+            self.EntryAmount.insert(0, data[0][4])
+            self.EntryComment.insert(0, data[0][5])
+        return event

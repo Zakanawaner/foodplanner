@@ -34,6 +34,27 @@ class DataBaser:
         self.close_connection()
         return [''.join(store[0]) for store in stores]
 
+    def get_store_by_id(self, storeId):
+        self.open_connection()
+        self.cursor.execute('SELECT store_name FROM store where store_id = ?;', (storeId,))
+        store = self.cursor.fetchone()[0]
+        self.close_connection()
+        return store
+
+    def get_week_days(self):
+        self.open_connection()
+        self.cursor.execute('SELECT day_name FROM day;')
+        days = list(self.cursor.fetchall())
+        self.close_connection()
+        return [''.join(day[0]) for day in days]
+
+    def get_day_courses(self):
+        self.open_connection()
+        self.cursor.execute('SELECT course_name FROM course;')
+        courses = list(self.cursor.fetchall())
+        self.close_connection()
+        return [''.join(course[0]) for course in courses]
+
     # Food #
     ########
     def get_foods(self, foods=None):
@@ -89,6 +110,21 @@ class DataBaser:
         result = list(self.cursor.fetchall())
         self.close_connection()
         return result
+
+    def get_food_markets(self, food, market=None):
+        self.open_connection()
+        self.cursor.execute("select food_id from food where food_name = ?", (food,))
+        foodId = self.cursor.fetchone()[0]
+        if market is None:
+            self.cursor.execute("select * from food_store where f_s_food_id = ?", (foodId,))
+        else:
+            self.cursor.execute("select store_id from store where store_name = ?", (market,))
+            storeId = self.cursor.fetchone()[0]
+            self.cursor.execute("select * from food_store where f_s_food_id = ? and f_s_store_id = ?",
+                                (foodId, storeId))
+        options = list(self.cursor.fetchall())
+        self.close_connection()
+        return options
 
     def search_food(self, query):
         self.open_connection()
@@ -148,27 +184,24 @@ class DataBaser:
             translation[q] = i - 1
         quality = translation[quality]
         self.open_connection()
-        if store != 'Tienda':
-            self.cursor.execute('SELECT store_id FROM store WHERE store_name = ?;', (store,))
-            stores = list(self.cursor.fetchall())[0]
-            self.cursor.execute('SELECT food_id FROM food WHERE food_name = ?;', (name,))
-            food = list(self.cursor.fetchall())[0]
-            if food and stores:
-                self.cursor.execute('SELECT f_s_store_id FROM food_store where f_s_food_id = ?;', (food[0],))
-                res = list(self.cursor.fetchall())
-                if res:
-                    self.cursor.execute("UPDATE food_store "
-                                        "SET f_s_price = ?, f_s_rating = ?, f_s_amount = ?, f_s_comment = ? "
-                                        "where f_s_food_id = ? AND f_s_store_id = ?;",
-                                        (price if re.match(r'^-?\d+(?:\.\d+)$', price) is not None else 0.0,
-                                         quality, float(amount), comment, food[0], stores[0]))
-                else:
-                    self.cursor.execute("INSERT INTO food_store "
-                                        "(f_s_food_id, f_s_store_id, f_s_price, f_s_rating, f_s_amount, f_s_comment) "
-                                        "values (?,?,?,?,?,?);",
-                                        (food[0], stores[0],
-                                         price if re.match(r'^-?\d+(?:\.\d+)$', price) is not None else 0.0,
-                                         quality, amount, comment))
+        self.cursor.execute('SELECT store_id FROM store WHERE store_name = ?;', (store,))
+        stores = list(self.cursor.fetchall())[0]
+        self.cursor.execute('SELECT food_id FROM food WHERE food_name = ?;', (name,))
+        food = list(self.cursor.fetchall())[0]
+        if food and stores:
+            self.cursor.execute('SELECT f_s_store_id FROM food_store where f_s_food_id = ? and f_s_store_id = ?;',
+                                (food[0], stores[0]))
+            res = list(self.cursor.fetchall())
+            if res:
+                self.cursor.execute("UPDATE food_store "
+                                    "SET f_s_price = ?, f_s_rating = ?, f_s_amount = ?, f_s_comment = ? "
+                                    "where f_s_food_id = ? AND f_s_store_id = ?;",
+                                    (price, quality, float(amount), comment, food[0], stores[0]))
+            else:
+                self.cursor.execute("INSERT INTO food_store "
+                                    "(f_s_food_id, f_s_store_id, f_s_price, f_s_rating, f_s_amount, f_s_comment) "
+                                    "values (?,?,?,?,?,?);",
+                                    (food[0], stores[0], price, quality, amount, comment))
         self.close_connection()
 
     # Recipes #
@@ -180,8 +213,10 @@ class DataBaser:
         else:
             aux = []
             for recipe in recipes:
-                self.cursor.execute("select * from recipe where recipe_name = ?;", (recipe,))
-                aux.append(self.cursor.fetchone())
+                self.cursor.execute("select * from recipe where recipe_id = ?;", (recipe,))
+                res = self.cursor.fetchone()
+                if res:
+                    aux.append(res)
             recipes = aux
         if not recipes:
             self.cursor.execute('SELECT * FROM recipe;')
@@ -299,110 +334,128 @@ class DataBaser:
         else:
             aux = []
             for diet in diets:
-                self.cursor.execute("select * from diets where diet_name = ?;", (diet,))
+                self.cursor.execute("select * from diet where diet_name = ?;", (diet,))
                 aux.append(self.cursor.fetchone())
             diets = aux
         if not diets:
-            self.cursor.execute('SELECT * FROM diets;')
+            self.cursor.execute('SELECT * FROM diet;')
             diets = list(self.cursor.fetchall())
+        self.close_connection()
         results = []
         for diet in diets:
             result = {'id': diet[0],
-                      'name': diet[-2],
-                      'recipes': []
+                      'name': diet[1],
+                      'current': diet[3],
+                      'days': []
                       }
-            for i, recipe in enumerate(diet[1:-2]):
-                self.cursor.execute('SELECT * from recipe where recipe_id = ?;', (recipe,))
-                rec = list(self.cursor.fetchall())
-                if rec:
-                    rec = rec[0]
-                    recipe_result = {'index': i,
-                                     'name': rec[1],
-                                     'ingredients': [],
-                                     'macros': [],
-                                     'micros': []
+            for i, day in enumerate(self.get_week_days()):
+                day_result = {'index': i+1,
+                              'name': day,
+                              'courses': []
+                              }
+                for j, course in enumerate(self.get_day_courses()):
+                    course_result = {'index': j+1,
+                                     'name': course,
+                                     'recipes': []
                                      }
-                    self.cursor.execute('SELECT * from food_recipe where f_r_recipe_id = ?;', (rec[0],))
-                    ingredients = list(self.cursor.fetchall())
-                    for ingredient in ingredients:
-                        self.cursor.execute('SELECT * from food where food_id = ?', (ingredient[1],))
-                        info = list(self.cursor.fetchall())[0]
-                        food_result = {'id': info[0],
-                                       'name': info[1],
-                                       'quantity': ingredient[2],
-                                       'calories': info[3]}
-                        recipe_result['ingredients'].append(food_result)
-                    self.cursor.execute('SELECT * from macro_recipe where m_r_recipe_id = ?;', (rec[0],))
-                    macros = list(self.cursor.fetchall())
-                    for macro in macros:
-                        self.cursor.execute('SELECT macro_name, macro_unit, macro_id from macro where macro_id = ?;',
-                                            (macro[1],))
-                        info = list(self.cursor.fetchall())[0]
-                        macro_result = {'name': info[0],
-                                        'amount': macro[2],
-                                        'unit': info[1],
-                                        'id': info[2]}
-                        recipe_result['macros'].append(macro_result)
-                    self.cursor.execute('SELECT * from micro_recipe where i_r_recipe_id = ?;', (rec[0],))
-                    micros = list(self.cursor.fetchall())
-                    for micro in micros:
-                        self.cursor.execute('SELECT micro_name, micro_unit, micro_id from micro where micro_id = ?;',
-                                            (micro[1],))
-                        info = list(self.cursor.fetchall())[0]
-                        micro_result = {'name': info[0],
-                                        'amount': micro[2],
-                                        'unit': info[1],
-                                        'id': info[2]}
-                        recipe_result['micros'].append(micro_result)
-                else:
-                    recipe_result = {'index': i,
-                                     'name': '',
-                                     'ingredients': [],
-                                     'macros': [],
-                                     'micros': []
-                                     }
-                result['recipes'].append(recipe_result)
+
+                    self.open_connection()
+                    self.cursor.execute("select r_c_d_d_recipe_id from recipe_course_day_diet "
+                                        "where r_c_d_d_diet_id = ? and "
+                                        "r_c_d_d_day_id = ? and "
+                                        "r_c_d_d_course_id = ?;", (diet[0], i+1, j+1))
+                    recipesId = list(self.cursor.fetchall())
+                    for k, recipe in enumerate(recipesId):
+                        self.cursor.execute('SELECT * from recipe where recipe_id = ?;', (recipe[0],))
+                        rec = list(self.cursor.fetchall())
+                        if rec:
+                            rec = rec[0]
+                            recipe_result = {'index': k+1,
+                                             'name': rec[1],
+                                             'link': rec[3],
+                                             'ingredients': [],
+                                             'macros': [],
+                                             'micros': []
+                                             }
+                            self.cursor.execute('SELECT * from food_recipe where f_r_recipe_id = ?;', (rec[0],))
+                            ingredients = list(self.cursor.fetchall())
+                            for ingredient in ingredients:
+                                self.cursor.execute('SELECT * from food where food_id = ?', (ingredient[1],))
+                                info = list(self.cursor.fetchall())[0]
+                                food_result = {'id': info[0],
+                                               'name': info[1],
+                                               'quantity': ingredient[2],
+                                               'calories': info[3]}
+                                recipe_result['ingredients'].append(food_result)
+                            self.cursor.execute('SELECT * from macro_recipe where m_r_recipe_id = ?;', (rec[0],))
+                            macros = list(self.cursor.fetchall())
+                            for macro in macros:
+                                self.cursor.execute('SELECT macro_name, macro_unit, macro_id from macro where macro_id = ?;',
+                                                    (macro[1],))
+                                info = list(self.cursor.fetchall())[0]
+                                macro_result = {'name': info[0],
+                                                'amount': macro[2],
+                                                'unit': info[1],
+                                                'id': info[2]}
+                                recipe_result['macros'].append(macro_result)
+                            self.cursor.execute('SELECT * from micro_recipe where i_r_recipe_id = ?;', (rec[0],))
+                            micros = list(self.cursor.fetchall())
+                            for micro in micros:
+                                self.cursor.execute('SELECT micro_name, micro_unit, micro_id from micro where micro_id = ?;',
+                                                    (micro[1],))
+                                info = list(self.cursor.fetchall())[0]
+                                micro_result = {'name': info[0],
+                                                'amount': micro[2],
+                                                'unit': info[1],
+                                                'id': info[2]}
+                                recipe_result['micros'].append(micro_result)
+                        else:
+                            recipe_result = {'index': i,
+                                             'name': '',
+                                             'ingredients': [],
+                                             'macros': [],
+                                             'micros': []
+                                             }
+                        course_result['recipes'].append(recipe_result)
+                    day_result['courses'].append(course_result)
+                result['days'].append(day_result)
             results.append(result)
         self.close_connection()
         return results
 
     def save_diet(self, data, name):
         self.open_connection()
-        dataToSave = []
-        for day in data:
-            for food in day:
+        self.cursor.execute("insert into diet (diet_name, diet_current) values (?, ?);", (name, True))
+        self.close_connection()
+        self.open_connection()
+        self.cursor.execute("select diet_id from diet where diet_name = ?;", (name,))
+        dietId = self.cursor.fetchone()[0]
+        for i, day in enumerate(data):
+            for j, food in enumerate(day):
                 self.cursor.execute("SElECT recipe_id from recipe where recipe_name = ?;", (food,))
                 res = self.cursor.fetchone()
-                dataToSave.append(res[0] if res else 0)
-        self.cursor.execute("SElECT diet_id from diets where diet_current = ?;", (True,))
+                self.cursor.execute("insert into recipe_course_day_diet "
+                                    "(r_c_d_d_diet_id, r_c_d_d_day_id, r_c_d_d_course_id, r_c_d_d_recipe_id) "
+                                    "values (?, ?, ?, ?);", (dietId, i+1, j+1, res[0] if res else 0))
+        self.cursor.execute("SElECT diet_id from diet where diet_current = ?;", (True,))
         res = list(self.cursor.fetchall())
         if res:
             for r in res:
-                self.cursor.execute("UPDATE diets set diet_current = ? where diet_id = ?;", (False, r[0]))
-        self.cursor.execute("INSERT into diets "
-                            "(diet_d1_c1, diet_d1_c2, diet_d1_c3, diet_d1_c4, diet_d1_c5,"
-                            "diet_d2_c1, diet_d2_c2, diet_d2_c3, diet_d2_c4, diet_d2_c5,"
-                            "diet_d3_c1, diet_d3_c2, diet_d3_c3, diet_d3_c4, diet_d3_c5,"
-                            "diet_d4_c1, diet_d4_c2, diet_d4_c3, diet_d4_c4, diet_d4_c5,"
-                            "diet_d5_c1, diet_d5_c2, diet_d5_c3, diet_d5_c4, diet_d5_c5,"
-                            "diet_d6_c1, diet_d6_c2, diet_d6_c3, diet_d6_c4, diet_d6_c5,"
-                            "diet_d7_c1, diet_d7_c2, diet_d7_c3, diet_d7_c4, diet_d7_c5,"
-                            "diet_name, diet_current) "
-                            "VALUES "
-                            "(?, ?, ?, ?, ?, ?, ?,"
-                            "?, ?, ?, ?, ?, ?, ?,"
-                            "?, ?, ?, ?, ?, ?, ?,"
-                            "?, ?, ?, ?, ?, ?, ?,"
-                            "?, ?, ?, ?, ?, ?, ?, ?, ?);",
-                            (tuple(dataToSave) + (name, True)))
+                self.cursor.execute("UPDATE diet set diet_current = ? where diet_id = ?;", (False, r[0]))
         self.close_connection()
 
     def get_current_diet(self):
         self.open_connection()
-        self.cursor.execute("SElECT * from diets where diet_current = ?;", (True,))
+        self.cursor.execute("SElECT diet_id, diet_name from diet where diet_current = ?;", (True,))
         res = list(self.cursor.fetchall())
+        if res:
+            self.cursor.execute("select r_c_d_d_recipe_id from recipe_course_day_diet where r_c_d_d_diet_id = ?;",
+                                (res[-1][0],))
+            data = list(self.cursor.fetchall())
+        else:
+            data = []
         self.close_connection()
-        return list(res[0])[1:-1] if res else None
+        return tuple([da[0] for da in data]) + (res[0][1],) if res else None
 
     # Inventory #
     #############
@@ -438,7 +491,7 @@ class DataBaser:
 
     # Groceries #
     #############
-    def get_last_grocery(self):
+    def get_next_grocery(self):
         pass
 
     # Common #

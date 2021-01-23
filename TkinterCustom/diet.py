@@ -4,14 +4,15 @@ from BD.dataBaser import DataBaser
 import webbrowser
 
 
-# TODO añadir la funcionalidad de modificar dietas. Con el mismo editor de Nueva Dieta
+# TODO añadir la funcionalidad de modificar dietas. Con el mismo editor de Nueva Dieta.
+# TODO calcular informaciones importantes referentes a la dieta
 class DietFrame(tk.Frame):
     def __init__(self, notebook, bg):
         super().__init__(notebook, bg=bg)
         self.dataBaser = DataBaser()
         self.ShowingNewRecipe = False
         self.ShowingRecipes = False
-        self.dayList = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+        self.dayList = self.dataBaser.get_week_days()
         # Create diets button
         self.ButtonShowDiet = tk.Button(self, text='Ver Dietas', command=self.show_diets)
         self.ButtonShowDiet.grid(row=0, column=0, pady=10, padx=10, sticky=tk.N)
@@ -26,7 +27,7 @@ class DietFrame(tk.Frame):
         self.LabelSaveResult = tk.Label(self, text='', bg='#EEEEEE')
         self.LabelSaveResult.grid(row=0, column=5)
         # Current Diet
-        self.Days = [self.Day(self, bg='#EEEEEE', day=day) for day in self.dayList]
+        self.Days = [self.Day(self, bg='#EEEEEE', day=day, dataBase=self.dataBaser) for day in self.dayList]
         self.get_current_diet()
         # Create Diets Tree View
         self.FrameDietTree = tk.Frame(self, bg='#EEEEEE')
@@ -37,14 +38,15 @@ class DietFrame(tk.Frame):
     def fill_tree(self, diets):
         self.TreeDiets.delete(*self.TreeDiets.get_children())
         for diet in diets:
-            rec = self.TreeDiets.insert('',
-                                          'end',
-                                          text=diet['name'])
-            foo = self.TreeDiets.insert(rec, 'end', text='Recetas')
-            for recipe in diet['recipes']:
-                f = self.TreeDiets.insert(foo,
-                                            'end',
-                                            text=recipe['name'])
+            di = self.TreeDiets.insert('',
+                                       'end',
+                                       text=diet['name'],
+                                       values=(('Dieta actual',)[0] if diet['current'] == 1 else ''))
+            for day in diet['days']:
+                da = self.TreeDiets.insert(di, 'end', text=day['name'])
+                for course in day['courses']:
+                    self.TreeDiets.insert(da, 'end', text=course['name'],
+                                          values=(course['recipes'][0]['name'] if course['recipes'] else '',))
 
     def show_diets(self):
         self.ShowingRecipes = not self.ShowingRecipes
@@ -119,9 +121,9 @@ class DietFrame(tk.Frame):
         webbrowser.open(event, new=0)
 
     class Day(tk.Frame):
-        def __init__(self, father, bg, day):
+        def __init__(self, father, bg, day, dataBase):
             super().__init__(father, bg=bg)
-            self.foodList = ['C1', 'C2', 'C3', 'C4', 'C5']
+            self.foodList = dataBase.get_day_courses()
             self.LabelDay = tk.Label(self, text=day, bg='#EEEEEE')
             self.LabelDay.grid(row=0, column=0)
             self.LabelFoods = []
