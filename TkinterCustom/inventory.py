@@ -4,7 +4,6 @@ from BD.dataBaser import DataBaser
 from TkinterCustom.nutritionix import EchoMaker
 
 
-# TODO hacer la parte de modificación de un ítem de inventario
 class InventoryFrame(tk.Frame):
     def __init__(self, father, bg):
         super().__init__(father, bg=bg)
@@ -32,16 +31,24 @@ class InventoryFrame(tk.Frame):
         self.TreeItem.pack(side=tk.LEFT, expand=True, fill='x')
         self.FrameTreeView.grid(row=1, column=0, columnspan=self.NumColumns)
         # Add Food Info Label
-        self.LabelUpdateItem = tk.Label(self, text="Actualizar", bg='#EEEEEE')
+        self.FrameUpdateItem = tk.Frame(self, bg='#EEEEEE')
+        self.LabelUpdateItem = tk.Label(self.FrameUpdateItem, text="Actualizar", bg='#EEEEEE')
+        self.LabelUpdateItem.grid(row=0, column=0, sticky=tk.W)
         # Update Food Name
-        self.LabelItemDetail = tk.Label(self, text='', bg='#EEEEEE')
+        self.LabelItemDetail = tk.Label(self.FrameUpdateItem, text='', bg='#EEEEEE')
+        self.LabelItemDetail.grid(row=0, column=1, sticky=tk.W)
         # Create Price Entry
-        self.EntryQuantity = tk.Entry(self)
+        self.LabelUpdateItem = tk.Label(self.FrameUpdateItem, text="Cantidad", bg='#EEEEEE')
+        self.LabelUpdateItem.grid(row=1, column=0, sticky=tk.W)
+        self.EntryQuantity = tk.Entry(self.FrameUpdateItem)
         self.EntryQuantity.insert(0, 'Cantidad')
+        self.EntryQuantity.grid(row=1, column=1, sticky=tk.W)
         # Create Save Food Button
-        self.ButtonSaveItem = tk.Button(self, text='Actualizar', command=self.update_item)
+        self.ButtonSaveItem = tk.Button(self.FrameUpdateItem, text='Actualizar', command=self.update_item)
+        self.ButtonSaveItem.grid(row=2, column=1, sticky=tk.W, pady=10)
         # Create Cancel Food Button
         self.ButtonCancelItem = tk.Button(self, text='Cancelar', command=self.hide_update_item)
+        self.ButtonCancelItem.grid(row=3, column=1, sticky=tk.E, pady=10)
 
     def fill_tree(self, items):
         self.TreeItem.delete(*self.TreeItem.get_children())
@@ -55,13 +62,9 @@ class InventoryFrame(tk.Frame):
 
     def tree_double_click(self, event):
         itemName = self.TreeItem.item(self.TreeItem.selection()[0], 'text')
-        if self.dataBaser.get_food(itemName):
-            self.LabelUpdateItem.grid(row=2, column=0, sticky=tk.W)
+        if self.dataBaser.get_item_id_by_name(itemName, 'food'):
+            self.FrameUpdateItem.grid(row=1, column=5, sticky=tk.N)
             self.LabelItemDetail.configure(text=itemName)
-            self.LabelItemDetail.grid(row=2, column=1, sticky=tk.W)
-            self.EntryQuantity.grid(row=3, column=1, sticky=tk.W)
-            self.ButtonSaveItem.grid(row=4, column=1, sticky=tk.W, pady=10)
-            self.ButtonCancelItem.grid(row=4, column=1, sticky=tk.E, pady=10)
 
     def update_item(self):
         self.dataBaser.update_item(self.LabelItemDetail.cget('text'), self.EntryQuantity.get())
@@ -69,8 +72,4 @@ class InventoryFrame(tk.Frame):
         self.fill_tree(self.dataBaser.get_inventory())
 
     def hide_update_item(self):
-        self.LabelUpdateItem.grid_forget()
-        self.LabelItemDetail.grid_forget()
-        self.EntryQuantity.grid_forget()
-        self.ButtonSaveItem.grid_forget()
-        self.ButtonCancelItem.grid_forget()
+        self.FrameUpdateItem.grid_forget()

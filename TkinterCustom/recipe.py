@@ -3,7 +3,6 @@ from tkinter import ttk
 from BD.dataBaser import DataBaser
 
 
-# TODO Añadir la funcionalidad de modificar receta, con el mismo editor de nueva receta
 class RecipeFrame(tk.Frame):
     def __init__(self, notebook, bg):
         super().__init__(notebook, bg=bg)
@@ -11,6 +10,7 @@ class RecipeFrame(tk.Frame):
         self.NumColumns = 8
         self.ShowingRecipes = False
         self.OnNEwRecipe = False
+        self.OnUpdateRecipe = False
         self.Ingredients = []
         # Recipes tree label
         self.LabelRecipes = tk.Label(self, text="Recetas guardadas", bg='#EEEEEE')
@@ -19,6 +19,7 @@ class RecipeFrame(tk.Frame):
         self.FrameRecipeTree = tk.Frame(self, bg='#EEEEEE')
         self.TreeRecipes = ttk.Treeview(self.FrameRecipeTree, height=15)
         self.TreeRecipes["columns"] = ('#1',)
+        self.TreeRecipes.bind("<Double-1>", self.update_recipe)
         self.fill_tree(self.dataBaser.get_recipes())
         self.TreeRecipes.pack(fill=tk.X)
         self.FrameRecipeTree.grid(row=1, column=0, pady=10)
@@ -48,7 +49,18 @@ class RecipeFrame(tk.Frame):
         self.ButtonSaveFood.grid(row=len(self.Ingredients)+1, column=0, pady=10)
 
     def new_recipe(self):
-        self.OnNEwRecipe = not self.OnNEwRecipe
+        if self.OnUpdateRecipe:
+            self.OnUpdateRecipe = False
+            self.ButtonNewRecipe['text'] = 'Nueva Receta'
+            self.ButtonSaveFood['text'] = 'Guardar'
+            for ingredient in self.Ingredients:
+                ingredient.grid_forget()
+            self.Ingredients = []
+            self.EntryRecipeName.delete(0, tk.END)
+            self.EntryRecipeLink.delete(0, tk.END)
+            self.FrameNewRecipe.grid_forget()
+        else:
+            self.OnNEwRecipe = not self.OnNEwRecipe
         if self.OnNEwRecipe:
             self.ButtonNewRecipe['text'] = 'Cancelar'
             self.FrameNewRecipe.grid(row=1, column=1, padx=20, sticky=tk.N)
@@ -57,6 +69,30 @@ class RecipeFrame(tk.Frame):
             for ingredient in self.Ingredients:
                 ingredient.grid_forget()
             self.FrameNewRecipe.grid_forget()
+
+    def update_recipe(self, event):
+        recipeId = self.dataBaser.get_recipe(self.TreeRecipes.item(self.TreeRecipes.selection()[0], 'text'), byId=False)
+        recipe = self.dataBaser.get_recipes([recipeId[0]])[0]
+        self.OnUpdateRecipe = True
+        self.ButtonNewRecipe['text'] = 'Cancelar'
+        self.EntryRecipeName.delete(0, tk.END)
+        self.EntryRecipeName.insert(0, recipe['name'])
+        self.EntryRecipeLink.delete(0, tk.END)
+        self.EntryRecipeLink.insert(0, recipe['link'])
+        self.SelectedServing.set(self.ServingList[int(recipe['servings'])-1])
+        self.ButtonSaveFood['text'] = 'Actualizar'
+        for ingredient in self.Ingredients:
+            ingredient.destroy()
+        self.Ingredients = []
+        for i, ingredient in enumerate(recipe['ingredients']):
+            self.add_ingredient()
+            self.Ingredients[i].EntryFoodSearch.delete(0, tk.END)
+            self.Ingredients[i].EntryFoodSearch.insert(0, ingredient['name'])
+            self.Ingredients[i].EntryIngredientQuantity.delete(0, tk.END)
+            self.Ingredients[i].EntryIngredientQuantity.insert(0, ingredient['quantity'])
+            self.Ingredients[i].FrameTreeView.grid_forget()
+        self.FrameNewRecipe.grid(row=1, column=1, padx=20, sticky=tk.N)
+        return event
 
     def fill_tree(self, recipes):
         self.TreeRecipes.delete(*self.TreeRecipes.get_children())
@@ -88,13 +124,17 @@ class RecipeFrame(tk.Frame):
                                            self.SelectedServing.get(),
                                            finalIngredients)
         if saved:
+            if self.OnUpdateRecipe:
+                self.OnUpdateRecipe = False
+                self.ButtonNewRecipe['text'] = 'Nueva Receta'
             for ingredient in self.Ingredients:
                 ingredient.destroy()
             self.EntryRecipeName.delete(0, tk.END)
             self.EntryRecipeName.insert(0, 'Nombre')
             self.EntryRecipeLink.delete(0, tk.END)
-            self.EntryRecipeLink.insert(0, 'Nombre')
+            self.EntryRecipeLink.insert(0, 'Link')
             self.SelectedServing.set(self.ServingList[0])
+            self.FrameNewRecipe.grid_forget()
 
     class Ingredient(tk.Frame):
         def __init__(self, father, bg):
@@ -107,7 +147,7 @@ class RecipeFrame(tk.Frame):
                 if not parent.EntryFoodSearch.get():
                     parent.FrameTreeView.grid_forget()
                 if sv.get():
-                    parent.fill_tree(self.dataBaser.search_food(sv.get()))
+                    parent.fill_tree(self.dataBaser.search_item(sv.get(), 'food'))
                 else:
                     parent.TreeSearch.delete(*parent.TreeSearch.get_children())
 

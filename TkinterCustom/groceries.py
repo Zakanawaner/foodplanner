@@ -39,45 +39,48 @@ class GroceryFrame(tk.Frame):
 
     def calculate_grocery(self):
         inventory = self.dataBaser.get_inventory()
-        recipes = self.dataBaser.get_recipes(self.dataBaser.get_current_diet()[0:-1])
-        necessities = []
-        for recipe in recipes:
-            for ingredient in recipe['ingredients']:
+        if self.dataBaser.get_current_diet():
+            recipes = self.dataBaser.get_recipes(self.dataBaser.get_current_diet()[0:-1])
+            necessities = []
+            for recipe in recipes:
+                for ingredient in recipe['ingredients']:
+                    exists = False
+                    index = -1
+                    for i, product in enumerate(necessities):
+                        if product['name'] == ingredient['name']:
+                            exists = True
+                            index = i
+                            break
+                    if exists:
+                        necessities[index]['amount'] += ingredient['quantity']
+                    else:
+                        necessity = {'name': ingredient['name'], 'amount': ingredient['quantity']}
+                        necessities.append(necessity)
+            groceries = []
+            for necessity in necessities:
                 exists = False
                 index = -1
-                for i, product in enumerate(necessities):
-                    if product['name'] == ingredient['name']:
+                for i, item in enumerate(inventory):
+                    if item['name'] == necessity['name']:
                         exists = True
                         index = i
                         break
                 if exists:
-                    necessities[index]['amount'] += ingredient['quantity']
+                    if inventory[index]['amount'] < necessity['amount']:
+                        groceries.append({'name': necessity['name'],
+                                          'amount': necessity['amount'] - inventory[index]['amount']})
                 else:
-                    necessity = {'name': ingredient['name'], 'amount': ingredient['quantity']}
-                    necessities.append(necessity)
-        groceries = []
-        for necessity in necessities:
-            exists = False
-            index = -1
-            for i, item in enumerate(inventory):
-                if item['name'] == necessity['name']:
-                    exists = True
-                    index = i
-                    break
-            if exists:
-                if inventory[index]['amount'] < necessity['amount']:
                     groceries.append({'name': necessity['name'],
-                                      'amount': necessity['amount'] - inventory[index]['amount']})
-            else:
-                groceries.append({'name': necessity['name'],
-                                  'amount': necessity['amount']})
-        for grocery in groceries:
-            options = self.dataBaser.get_food_markets(grocery['name'])
-            if options:
-                i = [o[2] for o in options].index(min([o[2] for o in options]))
-                grocery['market'] = self.dataBaser.get_store_by_id(options[i][0])
-                grocery['price'] = options[i][2]
-            else:
-                grocery['market'] = "No hay información de mercado"
-                grocery['price'] = 0
+                                      'amount': necessity['amount']})
+            for grocery in groceries:
+                options = self.dataBaser.get_food_markets(grocery['name'])
+                if options:
+                    i = [o[2] for o in options].index(min([o[2] for o in options]))
+                    grocery['market'] = self.dataBaser.get_item_name_by_id(options[i][0], 'store')
+                    grocery['price'] = options[i][2]
+                else:
+                    grocery['market'] = "No hay información de mercado"
+                    grocery['price'] = 0
+        else:
+            groceries = []
         return groceries

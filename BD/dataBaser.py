@@ -13,71 +13,74 @@ class DataBaser:
 
     # Getting hard info #
     #####################
-    def get_macros(self):
+    def get_all(self, table):
         self.open_connection()
-        self.cursor.execute('SELECT * FROM macro;')
-        macros = list(self.cursor.fetchall())
+        self.cursor.execute('SELECT * FROM {};'.format(table))
+        result = list(self.cursor.fetchall())
         self.close_connection()
-        return macros
+        return result
 
-    def get_micros(self):
+    def get_all_item_names(self, table):
         self.open_connection()
-        self.cursor.execute('SELECT * FROM micro;')
-        micros = list(self.cursor.fetchall())
+        self.cursor.execute('SELECT {}_name FROM {};'.format(table, table))
+        results = list(self.cursor.fetchall())
         self.close_connection()
-        return micros
+        return [''.join(result[0]) for result in results]
 
-    def get_store_names(self):
+    def get_all_by_item_name(self, name, table):
         self.open_connection()
-        self.cursor.execute('SELECT store_name FROM store;')
-        stores = list(self.cursor.fetchall())
+        self.cursor.execute("select * from {} where {}_name = ?;".format(table, table), (name,))
+        result = self.cursor.fetchone()
         self.close_connection()
-        return [''.join(store[0]) for store in stores]
+        return result
 
-    def get_store_by_id(self, storeId):
+    def get_item_name_by_id(self, itemId, table):
         self.open_connection()
-        self.cursor.execute('SELECT store_name FROM store where store_id = ?;', (storeId,))
-        store = self.cursor.fetchone()[0]
+        self.cursor.execute('SELECT {}_name FROM {} where {}_id = ?;'.format(table, table, table), (itemId,))
+        result = self.cursor.fetchone()[0]
         self.close_connection()
-        return store
+        return result
 
-    def get_week_days(self):
+    def get_item_id_by_name(self, itemName, table):
         self.open_connection()
-        self.cursor.execute('SELECT day_name FROM day;')
-        days = list(self.cursor.fetchall())
+        self.cursor.execute('SELECT {}_id FROM {} where {}_name = ?;'.format(table, table, table), (itemName,))
+        result = self.cursor.fetchone()[0]
         self.close_connection()
-        return [''.join(day[0]) for day in days]
+        return result
 
-    def get_day_courses(self):
+    def search_item(self, query, table):
         self.open_connection()
-        self.cursor.execute('SELECT course_name FROM course;')
-        courses = list(self.cursor.fetchall())
+        self.cursor.execute('SELECT {}_name FROM {} WHERE {}_name like ?;'.format(table, table, table),
+                            ('%' + query + '%',))
+        result = list(self.cursor.fetchall())
         self.close_connection()
-        return [''.join(course[0]) for course in courses]
+        return result
 
     # Food #
     ########
     def get_foods(self, foods=None):
-        self.open_connection()
         if foods is None:
             foods = []
         else:
             aux = []
             for food in foods:
-                self.cursor.execute("select * from food where food_name = ?;", (food,))
-                aux.append(self.cursor.fetchone())
+                aux.append(self.get_all_by_item_name(food, 'food'))
             foods = aux
         if not foods:
-            self.cursor.execute('SELECT * FROM food;')
-            foods = list(self.cursor.fetchall())
+            foods = self.get_all('food')
         results = []
+        self.open_connection()
         for food in foods:
             result = {'id': food[0],
                       'name': food[1],
                       'serving': food[2],
                       'calories': food[3],
-                      'macros': [],
-                      'micros': []}
+                      'marketInfo': [],
+                      'nutritionalInfo': {
+                              'macros': [],
+                              'micros': []
+                          }
+                      }
             self.cursor.execute('SELECT * from food_macro where f_m_food_id = ?;', (food[0],))
             macros = list(self.cursor.fetchall())
             for macro in macros:
@@ -88,7 +91,7 @@ class DataBaser:
                                 'amount': macro[2],
                                 'unit': info[1],
                                 'id': info[2]}
-                result['macros'].append(macro_result)
+                result['nutritionalInfo']['macros'].append(macro_result)
             self.cursor.execute('SELECT * from food_micro where f_i_food_id = ?;', (food[0],))
             micros = list(self.cursor.fetchall())
             for micro in micros:
@@ -99,39 +102,25 @@ class DataBaser:
                                 'amount': micro[2],
                                 'unit': info[1],
                                 'id': info[2]}
-                result['micros'].append(micro_result)
+                result['nutritionalInfo']['micros'].append(micro_result)
             results.append(result)
         self.close_connection()
         return results
 
-    def get_food(self, food):
-        self.open_connection()
-        self.cursor.execute('SELECT food_name FROM food WHERE food_name = ?;', (food,))
-        result = list(self.cursor.fetchall())
-        self.close_connection()
-        return result
-
     def get_food_markets(self, food, market=None):
         self.open_connection()
-        self.cursor.execute("select food_id from food where food_name = ?", (food,))
+        self.cursor.execute("select food_id from food where food_name = ?;", (food,))
         foodId = self.cursor.fetchone()[0]
         if market is None:
-            self.cursor.execute("select * from food_store where f_s_food_id = ?", (foodId,))
+            self.cursor.execute("select * from food_store where f_s_food_id = ?;", (foodId,))
         else:
-            self.cursor.execute("select store_id from store where store_name = ?", (market,))
+            self.cursor.execute("select store_id from store where store_name = ?;", (market,))
             storeId = self.cursor.fetchone()[0]
-            self.cursor.execute("select * from food_store where f_s_food_id = ? and f_s_store_id = ?",
+            self.cursor.execute("select * from food_store where f_s_food_id = ? and f_s_store_id = ?;",
                                 (foodId, storeId))
         options = list(self.cursor.fetchall())
         self.close_connection()
         return options
-
-    def search_food(self, query):
-        self.open_connection()
-        self.cursor.execute('SELECT food_name FROM food WHERE food_name like ?;', ('%' + query + '%',))
-        result = list(self.cursor.fetchall())
-        self.close_connection()
-        return result
 
     def save_food(self, foodList, serving):
         for food in foodList:
@@ -153,7 +142,7 @@ class DataBaser:
                     food_id = list(self.cursor.fetchone())[0]
                     if food_id:
                         # Save Macros
-                        for macro in self.get_macros():
+                        for macro in self.get_all('macro'):
                             for nutrient in food['full_nutrients']:
                                 if nutrient['attr_id'] == macro[1]:
                                     self.open_connection()
@@ -165,7 +154,7 @@ class DataBaser:
                                                          nutrient['value'] * weight_factor))
                                     self.close_connection()
                         # Save Micros
-                        for micro in self.get_micros():
+                        for micro in self.get_all('micro'):
                             for nutrient in food['full_nutrients']:
                                 if nutrient['attr_id'] == micro[1]:
                                     self.open_connection()
@@ -308,22 +297,20 @@ class DataBaser:
                                     (recipeId, int(microId), micros[microId][0], micros[microId][1]))
                 self.close_connection()
             ok = True
+        else:
+            pass  # TODO actualizar receta en BD
         self.connection.close()
         return ok
 
-    def get_recipe(self, recipeId):
+    def get_recipe(self, recipe, byId=True):
         self.open_connection()
-        self.cursor.execute('SELECT recipe_name, recipe_link FROM recipe WHERE recipe_id = ?;', (recipeId,))
+        if byId:
+            self.cursor.execute('SELECT recipe_name, recipe_link FROM recipe WHERE recipe_id = ?;', (recipe,))
+        else:
+            self.cursor.execute('SELECT recipe_id FROM recipe WHERE recipe_name = ?;', (recipe,))
         result = list(self.cursor.fetchall())
         self.close_connection()
         return result[0] if result else ''
-
-    def search_recipe(self, query):
-        self.open_connection()
-        self.cursor.execute('SELECT recipe_name FROM recipe WHERE recipe_name like ?;', ('%' + query + '%',))
-        result = list(self.cursor.fetchall())
-        self.close_connection()
-        return result
 
     # Diets #
     #########
@@ -348,12 +335,12 @@ class DataBaser:
                       'current': diet[3],
                       'days': []
                       }
-            for i, day in enumerate(self.get_week_days()):
+            for i, day in enumerate(self.get_all_item_names('day')):
                 day_result = {'index': i+1,
                               'name': day,
                               'courses': []
                               }
-                for j, course in enumerate(self.get_day_courses()):
+                for j, course in enumerate(self.get_all_item_names('course')):
                     course_result = {'index': j+1,
                                      'name': course,
                                      'recipes': []
@@ -444,9 +431,18 @@ class DataBaser:
                 self.cursor.execute("UPDATE diet set diet_current = ? where diet_id = ?;", (False, r[0]))
         self.close_connection()
 
-    def get_current_diet(self):
+    def set_current_diet(self, dietName):
         self.open_connection()
-        self.cursor.execute("SElECT diet_id, diet_name from diet where diet_current = ?;", (True,))
+        self.cursor.execute("update diet set diet_current=false where diet_current=true;")
+        self.cursor.execute("update diet set diet_current=true where diet_name=?;", (dietName,))
+        self.close_connection()
+
+    def get_current_diet(self, current=True, dietName=''):
+        self.open_connection()
+        if current:
+            self.cursor.execute("SElECT diet_id, diet_name from diet where diet_current = ?;", (True,))
+        else:
+            self.cursor.execute("SElECT diet_id, diet_name from diet where diet_name = ?;", (dietName,))
         res = list(self.cursor.fetchall())
         if res:
             self.cursor.execute("select r_c_d_d_recipe_id from recipe_course_day_diet where r_c_d_d_diet_id = ?;",
@@ -456,6 +452,16 @@ class DataBaser:
             data = []
         self.close_connection()
         return tuple([da[0] for da in data]) + (res[0][1],) if res else None
+
+    def get_diet(self, recipe, byId=True):
+        self.open_connection()
+        if byId:
+            self.cursor.execute('SELECT diet_name FROM diet WHERE diet_id = ?;', (recipe,))
+        else:
+            self.cursor.execute('SELECT diet_id FROM diet WHERE diet_name = ?;', (recipe,))
+        result = list(self.cursor.fetchall())
+        self.close_connection()
+        return result[0] if result else ''
 
     # Inventory #
     #############

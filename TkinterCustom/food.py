@@ -2,12 +2,20 @@ import tkinter as tk
 from tkinter import ttk
 from BD.dataBaser import DataBaser
 from TkinterCustom.nutritionix import EchoMaker
+from TkinterCustom.mathematician import Calculator
 
 
-# TODO Pensar en cómo añadir la información de los mercados
+# todo Añadir una calculadora para el peso de los alimentos en los mercados
 class FoodFrame(tk.Frame):
     def __init__(self, father, bg):
         super().__init__(father, bg=bg)
+
+        def callback(parent, sv):
+            if sv.get():
+                parent.fill_tree(self.dataBaser.search_item(sv.get(), 'food'), True)
+            else:
+                parent.fill_tree(self.dataBaser.get_foods())
+
         self.dataBaser = DataBaser()
         self.echoMaker = EchoMaker()
         self.NumColumns = 3
@@ -15,7 +23,9 @@ class FoodFrame(tk.Frame):
         self.LabelNewFood = tk.Label(self, text="Nuevo alimento", bg='#EEEEEE')
         self.LabelNewFood.grid(row=0, column=1, pady=10)
         # Create Food Name Entry
-        self.EntryFoodName = tk.Entry(self)
+        self.VarFoodSearch = tk.StringVar()
+        self.VarFoodSearch.trace('w', lambda name, index, mode, sv=self.VarFoodSearch: callback(self, sv))
+        self.EntryFoodName = tk.Entry(self, textvariable=self.VarFoodSearch)
         self.EntryFoodName.grid(row=0, column=2, pady=10)
         # Create Save Food Button
         self.ButtonSaveFood = tk.Button(self, text='Guardar', command=self.save_new_food)
@@ -46,7 +56,7 @@ class FoodFrame(tk.Frame):
         self.LabelFoodComment = tk.Label(self.FrameUpdateFood, text='Comentarios', bg='#EEEEEE')
         self.LabelFoodComment.grid(row=5, column=0, sticky=tk.E)
         # Add Info Market
-        self.StoreList = self.dataBaser.get_store_names()
+        self.StoreList = self.dataBaser.get_all_item_names('store')
         self.SelectedStore = tk.StringVar(self.FrameUpdateFood)
         self.SelectedStore.set(self.StoreList[0])
         self.DropdownMarket = tk.OptionMenu(self.FrameUpdateFood,
@@ -74,29 +84,42 @@ class FoodFrame(tk.Frame):
         # Create Cancel Food Button
         self.ButtonCancelFood = tk.Button(self.FrameUpdateFood, text='Cancelar', command=self.hide_update_food)
         self.ButtonCancelFood.grid(row=6, column=1, sticky=tk.E)
+        # Create Calculator
+        self.Calculator = Calculator(self, bg)
+        self.Calculator.grid(row=1, rowspan=5, column=8, sticky=tk.E, padx=25)
 
-    def fill_tree(self, foods):
+    def fill_tree(self, foods, search=False):
         self.TreeFood.delete(*self.TreeFood.get_children())
-        for food in foods:
-            foo = self.TreeFood.insert('',
-                                       'end',
-                                       text=food['name'], values='100g')
-            mac = self.TreeFood.insert(foo, 'end', text='Macros')
-            for macro in food['macros']:
-                m = self.TreeFood.insert(mac,
-                                         'end',
-                                         text=macro['name'])
-                self.TreeFood.insert(m, 'end',
-                                     text=macro['amount'],
-                                     values=(macro['unit']))
-            mic = self.TreeFood.insert(foo, 'end', text='Micros')
-            for micro in food['micros']:
-                i = self.TreeFood.insert(mic,
-                                         'end',
-                                         text=micro['name'])
-                self.TreeFood.insert(i, 'end',
-                                     text=micro['amount'],
-                                     values=(micro['unit']))
+        if search:
+            for food in foods:
+                self.TreeFood.insert('', 'end', text=food[0])
+        else:
+            for food in foods:
+                foo = self.TreeFood.insert('',
+                                           'end',
+                                           text=food['name'], values='100g')
+                mer = self.TreeFood.insert(foo, 'end', text='Información de mercados')
+                data = self.dataBaser.get_food_markets(food['name'])
+                for dat in data:
+                    self.TreeFood.insert(mer, 'end', text=self.dataBaser.get_item_name_by_id(dat[0], 'store'),
+                                         values=(str(dat[2]) + ' €/Kg',))
+                nut = self.TreeFood.insert(foo, 'end', text='Información nutricional')
+                mac = self.TreeFood.insert(nut, 'end', text='Macros')
+                for macro in food['nutritionalInfo']['macros']:
+                    m = self.TreeFood.insert(mac,
+                                             'end',
+                                             text=macro['name'])
+                    self.TreeFood.insert(m, 'end',
+                                         text=macro['amount'],
+                                         values=(macro['unit']))
+                mic = self.TreeFood.insert(nut, 'end', text='Micros')
+                for micro in food['nutritionalInfo']['micros']:
+                    i = self.TreeFood.insert(mic,
+                                             'end',
+                                             text=micro['name'])
+                    self.TreeFood.insert(i, 'end',
+                                         text=micro['amount'],
+                                         values=(micro['unit']))
 
     def save_new_food(self):
         self.echoMaker.natural_nutrients(self.EntryFoodName.get())
@@ -104,7 +127,7 @@ class FoodFrame(tk.Frame):
 
     def tree_double_click(self, event):
         foodName = self.TreeFood.item(self.TreeFood.selection()[0], 'text')
-        if self.dataBaser.get_food(foodName):
+        if self.dataBaser.get_item_id_by_name(foodName, 'food'):
             self.FrameUpdateFood.grid(row=1, column=6, padx=10)
             self.LabelFoodDetail.configure(text=foodName)
             self.change_market_selection(self.SelectedStore.get())
@@ -119,6 +142,7 @@ class FoodFrame(tk.Frame):
                                          self.EntryAmount.get(),
                                          self.EntryComment.get())
         self.hide_update_food()
+        self.fill_tree(self.dataBaser.get_foods())
 
     def hide_update_food(self):
         self.SelectedStore.set(self.StoreList[0])
